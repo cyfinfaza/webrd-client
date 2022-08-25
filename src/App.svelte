@@ -13,6 +13,7 @@
 	import BooleanIndicator from "./components/BooleanIndicator.svelte";
 	import Labeled from "./components/Labeled.svelte";
 
+	/**@type {HTMLVideoElement}*/
 	let desktopVideoElement;
 	let desktopVideo = null;
 
@@ -22,6 +23,9 @@
 
 	/** @type {RTCPeerConnection} */
 	let pc;
+
+	/** @type {RTCDataChannel} */
+	let userInputChannel;
 
 	let connectedTo = "";
 
@@ -76,6 +80,13 @@
 				},
 			],
 		});
+		userInputChannel = pc.createDataChannel("userInput");
+		userInputChannel.onopen = () => {
+			console.log("WebRTC: User input channel open");
+		};
+		userInputChannel.onclose = () => {
+			console.log("WebRTC: User input channel closed");
+		};
 		pc.onicecandidate = (e) => {
 			console.log("WebRTC: Sending new local ICE candidate", e);
 			mqttClient.send(
@@ -90,6 +101,7 @@
 		};
 		pc.onconnectionstatechange = (e) => {
 			console.log("WebRTC: RTCPeerConnection state changed", e);
+			console.log("WebRTC: Now " + pc.connectionState);
 		};
 		const offer = await pc.createOffer({ offerToReceiveVideo: true });
 		console.log("WebRTC: Making offer", offer);
@@ -108,6 +120,33 @@
 
 	if ($mqttConfig.autoConnect) {
 		mqttConnect(onMessageArrived);
+	}
+
+	function userInputCallback(e) {
+		e.preventDefault();
+		// console.log(e.buttons);
+		let x, y;
+		if (
+			desktopVideoElement.videoWidth / desktopVideoElement.videoHeight >
+			window.innerWidth / window.innerHeight
+		) {
+			x = e.clientX / window.innerWidth;
+			const videoHeight =
+				(window.innerWidth * desktopVideoElement.videoHeight) /
+				desktopVideoElement.videoWidth;
+			y = (e.clientY - (window.innerHeight - videoHeight) / 2) / videoHeight;
+		} else {
+			const videoWidth =
+				(window.innerHeight * desktopVideoElement.videoWidth) /
+				desktopVideoElement.videoHeight;
+			x = (e.clientX - (window.innerWidth - videoWidth) / 2) / videoWidth;
+			y = e.clientY / window.innerHeight;
+		}
+		if (x > 0 && x < 1 && y > 0 && y < 1) {
+			// console.log(x, y);
+			console.log("WebRTC: Sending user input");
+			userInputChannel.send(JSON.stringify({ x, y, buttons: e.buttons }));
+		}
 	}
 </script>
 
@@ -201,6 +240,12 @@
 		bind:this={desktopVideoElement}
 		class="sendPreview"
 		on:loadedmetadata={(e) => e.target.play()}
+		on:mousemove={userInputCallback}
+		on:keydown={userInputCallback}
+		on:keyup={userInputCallback}
+		on:mousedown={userInputCallback}
+		on:mouseup={userInputCallback}
+		on:contextmenu={(e) => e.preventDefault()}
 	/>
 </div>
 
@@ -235,7 +280,7 @@
 		transition: 240ms ease;
 		display: flex;
 		justify-content: center;
-		align-items: center;
+		align-items: flex-end;
 
 		video {
 			width: 100%;

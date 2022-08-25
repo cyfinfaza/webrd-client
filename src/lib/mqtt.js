@@ -45,7 +45,7 @@ export function mqttConnect(onMessageArrived) {
 			onFailure: onFailure,
 			useSSL: true,
 			willMessage: willMessage,
-			keepAliveInterval: 65,
+			keepAliveInterval: 5,
 			reconnect: true,
 			// mqttVersion: 3,
 			// uris: ["wss://mq03.cy2.me/mqtt"],
