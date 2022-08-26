@@ -122,9 +122,9 @@
 		mqttConnect(onMessageArrived);
 	}
 
-	function userInputCallback(e) {
+	function handleMouseInput(e) {
 		e.preventDefault();
-		// console.log(e.buttons);
+		// console.log(e);
 		let x, y;
 		if (
 			desktopVideoElement.videoWidth / desktopVideoElement.videoHeight >
@@ -142,12 +142,32 @@
 			x = (e.clientX - (window.innerWidth - videoWidth) / 2) / videoWidth;
 			y = e.clientY / window.innerHeight;
 		}
+		const input = { type: "mouse", x, y, buttons: e.buttons };
+		if (e.deltaX) input.deltaX = e.deltaX;
+		if (e.deltaY) input.deltaY = e.deltaY;
 		if (x > 0 && x < 1 && y > 0 && y < 1) {
 			// console.log(x, y);
 			console.log("WebRTC: Sending user input");
-			userInputChannel.send(JSON.stringify({ x, y, buttons: e.buttons }));
+			userInputChannel.send(JSON.stringify(input));
 		}
 	}
+
+	function handleKeyboardInput(e) {
+		console.log(e);
+		if (connectedTo !== "") {
+			e.preventDefault();
+			userInputChannel.send(
+				JSON.stringify({
+					type: "keyboard",
+					key: e.code,
+					down: e.type === "keydown",
+				})
+			);
+		}
+	}
+
+	window.addEventListener("keydown", handleKeyboardInput);
+	window.addEventListener("keyup", handleKeyboardInput);
 </script>
 
 <main class:hidden={connectedTo !== ""}>
@@ -208,7 +228,7 @@
 					/>
 				</Labeled>
 			{/if}
-			<Labeled label="Auto Connect? ">
+			<Labeled label="Auto connect? ">
 				<input type="checkbox" bind:checked={$mqttConfig.autoConnect} />
 			</Labeled>
 			<button on:click={() => mqttConnect(onMessageArrived)}>Connect now</button
@@ -218,11 +238,19 @@
 	<div>
 		<h2>Connect to host</h2>
 		{#if Object.keys(hosts).length}
-			{#each Object.keys(hosts) as host}
-				<button on:click={() => connectToHost(host)}
-					><strong>{hosts[host].name}</strong> ({host})</button
-				>
-			{/each}
+			<div class="config">
+				{#each Object.keys(hosts) as host}
+					<button on:click={() => connectToHost(host)}>
+						<strong>{hosts[host].name}</strong> ({host})
+						<span title="Accepts mouse input">
+							{hosts[host].acceptsMouseInput ? "🖱️" : ""}
+						</span>
+						<span title="Accepts keyboard input">
+							{hosts[host].acceptsKeyboardInput ? "⌨️" : ""}
+						</span>
+					</button>
+				{/each}
+			</div>
 		{:else}
 			<p>No hosts found</p>
 		{/if}
@@ -234,18 +262,26 @@
 		<span>
 			Connected to: <strong>{hosts[connectedTo]?.name}</strong> ({connectedTo})
 		</span>
+		<button
+			on:click={() => {
+				if (window.innerHeight === screen.height) {
+					document.exitFullscreen();
+				} else {
+					document.body.requestFullscreen();
+				}
+			}}>Fullscreen</button
+		>
 		<button on:click={() => disconnect()}>Disconnect</button>
 	</div>
 	<video
 		bind:this={desktopVideoElement}
 		class="sendPreview"
 		on:loadedmetadata={(e) => e.target.play()}
-		on:mousemove={userInputCallback}
-		on:keydown={userInputCallback}
-		on:keyup={userInputCallback}
-		on:mousedown={userInputCallback}
-		on:mouseup={userInputCallback}
+		on:mousemove={handleMouseInput}
+		on:mousedown={handleMouseInput}
+		on:mouseup={handleMouseInput}
 		on:contextmenu={(e) => e.preventDefault()}
+		on:wheel={handleMouseInput}
 	/>
 </div>
 
@@ -286,6 +322,7 @@
 			width: 100%;
 			height: 100%;
 			object-fit: contain;
+			cursor: url(cursor.svg) 12 12, auto;
 		}
 
 		.controls {
